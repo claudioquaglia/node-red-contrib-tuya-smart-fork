@@ -1,125 +1,74 @@
 import { Red } from "node-red";
-import { TuyaSmartNode, TuyaSmartProperties, TuyaSmartNodeMessage, TuyaSmartNodeInputMessage, NodeRedInputMessage } from "./tuya-smart-properties";
-import TuyaDevice = require("tuyapi");
-import { isUndefined } from "util";
-
+import TuyAPI from "tuyapi";
+import { TuyaSmartNode, TuyaSmartProperties } from "./tuya-smart-properties";
 
 export = (RED: Red) => {
-    function TuyaSmartConfigNode(this: TuyaSmartNode, properties: TuyaSmartProperties) {
-        let node = this;
-        RED.nodes.createNode(this, properties);
+  function TuyaSmartConfigNode(
+    this: TuyaSmartNode,
+    properties: TuyaSmartProperties
+  ) {
+    const node = this;
 
-        this.deviceName = properties.deviceName;
-        this.deviceId = properties.deviceId;
-        this.deviceKey = properties.deviceKey;
-        this.deviceIp = properties.deviceIp;
-        this.pollingInterval = properties.pollingInterval;
-        this.request = JSON.parse(properties.request);
+    RED.nodes.createNode(node, properties);
 
-        node.status({ fill:"yellow", shape:"ring", text: "connecting"});
-        let indicateConnectionOk = () => node.status({ fill:"green", shape:"ring", text: "connected"});
-        let indicateConnectionError = () => node.status({ fill:"red", shape:"ring", text: "disconnected"});
-        let indicateFailedToSetState = () => node.status({ fill:"red", shape:"ring", text: "error changing state"});
-        
-        /**
-         * Polls the state from device, then sends it through the output nodes.
-         * Will set the ui-status as well accordingly.
-         */
-        let pollAndSendState = () => {
-            smartDevice.get(this.request).then(data => {
-                indicateConnectionOk();
-                node.send({
-                    payload: {
-                        data: data,
-                        deviceIp: node.deviceIp,
-                        deviceId: node.deviceId,
-                        deviceName: node.deviceName
-                    } as TuyaSmartNodeMessage
-                });
-            }).catch(indicateConnectionError);
-        };
+    const request = JSON.parse(properties.request);
 
-
-        /**
-         * Interval handling
-         */
-        var pollingTimer : NodeJS.Timer | undefined = undefined;;
-        let startPolling = () => {            
-            stopPolling();
-            pollingTimer = setInterval(() => {
-                pollAndSendState();
-            }, node.pollingInterval * 1000);
-        }
-        let stopPolling = () => {
-            if(pollingTimer === undefined) return;
-            clearInterval(pollingTimer);
-            pollingTimer = undefined;
-        };
-
-        /**
-         *
-         * @param msg input message received
-         */
-        let onInput = (msg: NodeRedInputMessage) => {
-
-            let setMsg : TuyAPISetOptions | TuyAPISetMultipleOptions;
-
-            if(Array.isArray(msg.payload)) {
-              let inputNodeMsgs : TuyaSmartNodeInputMessage[] = msg.payload;
-
-              let object : TuyAPISetMultipleOptions = {
-                  multiple: true,
-                  data: {}
-              };
-
-              // convert input messages to TuyAPI state
-              for(let inputNodeMsg of inputNodeMsgs) {
-                object.data[isUndefined(inputNodeMsg.dpsIndex) ? 1 : inputNodeMsg.dpsIndex] = inputNodeMsg.set;
-              }
-
-              setMsg = object;
-            } else {
-              let inputNodeMsg : TuyaSmartNodeInputMessage = msg.payload;
-
-              // convert input message to TuyAPI state
-              let object : TuyAPISetOptions = {
-                  set: inputNodeMsg.set,
-                  dps: isUndefined(inputNodeMsg.dpsIndex) ? 1 : inputNodeMsg.dpsIndex
-              };
-
-              setMsg = object;
-            }
-
-
-            // set state
-            smartDevice.set(setMsg).then((result : Boolean)  => {
-                result ? indicateConnectionOk() : indicateFailedToSetState();
-                pollAndSendState();
-            }).catch(e => {
-                indicateConnectionError();
-                console.error(e);
-            });
-        };
-
-        // hook up handlers
-        this.on('close', stopPolling);
-        this.on('input', onInput);
-
-        // device handling
-        let deviceOptions = {
-            id: node.deviceId,
-            key: node.deviceKey,
-            ip: node.deviceIp
-        };
-        let smartDevice = new TuyaDevice(deviceOptions);
-
-        // initiate the node
-        startPolling();
-    }
-
-    RED.nodes.registerType("tuya-smart", TuyaSmartConfigNode, {
-        credentials: {
-             deviceKey: { type: "text" }
-        }
+    const smartDevice = new TuyAPI({
+      id: properties.deviceId,
+      key: properties.deviceKey,
+      ip: properties.deviceIp,
+      version: properties.protocolVersion ?? "3.3"
     });
+
+    const indicateConnectionOk = () =>
+      node.status({ fill: "green", shape: "ring", text: "connected" });
+
+    const indicateConnectionError = () =>
+      node.status({ fill: "red", shape: "ring", text: "disconnected" });
+
+    // const indicateFailedToSetState = () =>
+    //   node.status({ fill: "red", shape: "ring", text: "error changing state" });
+
+    const disconnectFromDevice = () => smartDevice.disconnect();
+
+    node.on("close", disconnectFromDevice);
+    node.on("input", console.log);
+    node.status({ fill: "yellow", shape: "ring", text: "connecting" });
+
+    smartDevice
+      .find()
+      .then(() => {
+        smartDevice.connect();
+      })
+      .catch((exception: any) => {
+        indicateConnectionError();
+        console.log("ex", exception);
+      });
+
+    smartDevice.on("connected", () => {
+      indicateConnectionOk();
+      smartDevice.get(request);
+    });
+
+    smartDevice.on("disconnected", () => {
+      console.log("Disconnected from device.");
+    });
+
+    smartDevice.on("error", error => {
+      console.log("Error!", error);
+    });
+
+    smartDevice.on("data", data => {
+      console.log("Data from device:", data);
+      console.log(`Boolean status of default property: ${data.dps["1"]}.`);
+
+      node.log(data);
+    });
+  }
+
+  RED.nodes.registerType("tuya-smart-fork", TuyaSmartConfigNode, {
+    credentials: {
+      deviceKey: { type: "text" }
+    }
+  });
 };

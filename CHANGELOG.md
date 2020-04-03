@@ -1,3 +1,6 @@
+# 2.0.0
+- Forked version with updated dependncies
+
 # 1.2.0
 - Added ability to set multiple states at once, see #6
 
