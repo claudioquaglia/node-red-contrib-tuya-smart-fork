@@ -2,11 +2,9 @@
   "name": "node-red-contrib-tuya-smart-fork",
   "version": "2.0.0",
   "description": "Nodes to get data from tuya smart devices (like smart plugs, power strips, bulbs, ...).",
-  "main": "dist/index.js",
   "scripts": {
-    "clean": "rm -rf dist pkg out",
-    "build": "tsc && cp lib/*.html dist/lib/",
-    "debug": "npm run build && docker run -it -p 1880:1880 -v $(pwd)/dist/lib:/data/nodes nodered/node-red-docker"
+    "clean": "rm -rf dist",
+    "build": "npm run clean && tsc && cp src/*.html dist/"
   },
   "repository": {
     "type": "git",
@@ -23,14 +21,13 @@
   "license": "MIT",
   "node-red": {
     "nodes": {
-      "tuya-smart": "dist/lib/tuya-smart.js"
+      "tuya-smart-fork": "dist/tuya-smart-fork.js"
     }
   },
   "devDependencies": {
     "@types/node": "13.11.0",
     "@types/node-red": "0.20.1",
-    "debug": "^4.1.1",
-    "mkdirp": "1.0.3",
+    "debug": "4.1.1",
     "ts-node": "8.8.1",
     "tslint": "6.1.1",
     "typescript": "3.8.3"
